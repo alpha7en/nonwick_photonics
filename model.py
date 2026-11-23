@@ -309,7 +309,7 @@ def graph_small_world(N: int) -> np.ndarray:
 
 
 def graph_modular_bridge(N: int, J_bridge: float = 0.15) -> np.ndarray:
-    """Two-community modular bottleneck graph: two N/2-site chorded rings joined by J_bridge (Sec. III.C)."""
+    """Two-community modular bottleneck graph: two N/2-site rings (chorded for N in {8, 16}) joined by J_bridge (Sec. III.C)."""
     M = N // 2
     adj = np.zeros((N, N), dtype=np.float64)
     for base in (0, M):

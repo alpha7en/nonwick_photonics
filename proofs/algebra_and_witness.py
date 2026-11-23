@@ -543,6 +543,22 @@ def verify_bose_hubbard_witness():
     assert sp.trigsimp(sp.trace(E2_3[(1, 1)] * d2_th) + sp.Rational(1, 2) * U * J * sp.sin(4 * th)) == 0
     assert sp.simplify(sp.trace(E2_3[(0, 1)] * d2_th).subs(th, sp.pi / 4) + 6 * U * J) == 0
 
+    # Symmetric B1 on N = 2 dimer: O(U t) vanishes, O(U J t^2) yields +8 U J (HOM - NOON+) and +4 U J (HOM - NOON-).
+    _, b2_2 = annihilation_sympy(2, 2)
+    E2_2 = {(m, n): b2_2[m].H * b2_2[n] for m in range(2) for n in range(2)}
+    H_dim_U = -J * (E2_2[(0, 1)] + E2_2[(1, 0)]) + sp.Rational(1, 2) * U * (
+        E2_2[(0, 0)] * (E2_2[(0, 0)] - sp.eye(3)) + E2_2[(1, 1)] * (E2_2[(1, 1)] - sp.eye(3))
+    )
+    M_d2 = sp.Matrix([[0, gamma, 4 * gamma], [gamma, 0, gamma], [4 * gamma, gamma, 0]])
+    L_dim = lambda X: -sp.I * comm(H_dim_U, X) - sp.matrix_multiply_elementwise(M_d2, X)
+    rho_h = sp.diag(0, 1, 0)
+    rho_np = sp.Matrix([[sp.Rational(1, 2), 0, sp.Rational(1, 2)], [0, 0, 0], [sp.Rational(1, 2), 0, sp.Rational(1, 2)]])
+    rho_nm = sp.Matrix([[sp.Rational(1, 2), 0, -sp.Rational(1, 2)], [0, 0, 0], [-sp.Rational(1, 2), 0, sp.Rational(1, 2)]])
+    d1_bp, d1_bm = L_dim(rho_h - rho_np), L_dim(rho_h - rho_nm)
+    assert sp.simplify(sp.trace(E2_2[(0, 1)] * d1_bp)) == 0 and sp.simplify(sp.trace(E2_2[(0, 1)] * d1_bm)) == 0
+    assert sp.simplify(sp.trace(E2_2[(0, 1)] * L_dim(d1_bp)) - 8 * U * J) == 0
+    assert sp.simplify(sp.trace(E2_2[(0, 1)] * L_dim(d1_bm)) - 4 * U * J) == 0
+
     # Doublon-free B2-CZ4 on 4-site chain: O(t) vanishes, O(U J t^2) turns on via virtual doublons.
     _, b2_4 = annihilation_sympy(4, 2)
     _, idx2_4 = fock_basis(4, 2)

@@ -16,7 +16,7 @@ from scipy.sparse import csr_matrix, diags as spdiags, eye as speye, kron as spk
 from scipy.sparse.linalg import eigs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from model import (  # noqa: E402
+from model import (
     DATA_DIR,
     antisym_model,
     crossing_stats,

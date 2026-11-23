@@ -13,7 +13,6 @@ import json
 import numpy as np
 import sympy as sp
 from scipy.linalg import expm
-from scipy.optimize import brentq
 
 
 def fock_basis(N: int, k_ph: int):
@@ -183,6 +182,18 @@ def verify_threshold_metrics_and_gaps():
         assert np.allclose(e1[1:], 2.0 * Nv, atol=1e-10) and np.allclose(ec, 4.0 * (Nv + 1), atol=1e-10)
         kn_ratios[f"K_{Nv}"] = round(float(ec[0] / e1[1]), 6)
 
+    # Exact symbolic K_3 adiabatic-elimination spectrum: {0: 1, -6: 2, -16: 3} in units of J^2 / gamma.
+    _, b3_k3 = annihilation_sympy(3, 2)
+    H_k3 = sum((-(b3_k3[m].H * b3_k3[n]) for m in range(3) for n in range(3) if m != n), sp.zeros(6, 6))
+    W_k3 = sp.zeros(6, 6)
+    for a in range(6):
+        for b in range(6):
+            if a != b and H_k3[a, b] != 0:
+                rate = 2 * abs(H_k3[a, b]) ** 2
+                W_k3[a, b] = rate
+                W_k3[b, b] -= rate
+    assert W_k3.eigenvals() == {sp.Integer(0): 1, sp.Integer(-6): 2, sp.Integer(-16): 3}
+
     mod_ratios = {}
     for M in (3, 4, 5, 6):
         Nv = 2 * M
@@ -342,17 +353,32 @@ def verify_passive_synthesis_and_spdc():
     U_DC_ab = sp.Matrix([[1 / sp.sqrt(2), sp.I / sp.sqrt(2), 0], [sp.I / sp.sqrt(2), 1 / sp.sqrt(2), 0], [0, 0, 1]])
     U_H_bc = sp.Matrix([[1, 0, 0], [0, 1 / sp.sqrt(2), 1 / sp.sqrt(2)], [0, 1 / sp.sqrt(2), -1 / sp.sqrt(2)]])
     U_b2 = U_H_bc * sp.diag(1, sp.exp(sp.I * phi / 2), 1) * U_DC_ab
+    assert sp.simplify(U_b2.H * U_b2 - sp.eye(3)) == sp.zeros(3, 3)
     S_110 = sp.Matrix([[0, 1, 0], [1, 0, 0], [0, 0, 0]]) / sp.sqrt(2)
     S_b2_1 = sp.simplify(U_b2 * S_110 * U_b2.T)
     S_b2_2 = sp.simplify(U_H_bc * S_110 * U_H_bc.T)
+    S_b2_1_tgt = sp.Matrix([
+        [1 / sp.sqrt(2), 0, 0],
+        [0, sp.exp(sp.I * phi) / (2 * sp.sqrt(2)), sp.exp(sp.I * phi) / (2 * sp.sqrt(2))],
+        [0, sp.exp(sp.I * phi) / (2 * sp.sqrt(2)), sp.exp(sp.I * phi) / (2 * sp.sqrt(2))],
+    ])
+    S_b2_2_tgt = sp.Matrix([[0, sp.Rational(1, 2), sp.Rational(1, 2)], [sp.Rational(1, 2), 0, 0], [sp.Rational(1, 2), 0, 0]])
+    assert sp.simplify(S_b2_1 - sp.I * S_b2_1_tgt) == sp.zeros(3, 3)
+    assert sp.simplify(S_b2_2 - S_b2_2_tgt) == sp.zeros(3, 3)
     assert sp.simplify(2 * (S_b2_1.H * S_b2_1).T - 2 * (S_b2_2.H * S_b2_2).T) == sp.zeros(3, 3)
 
+    S_fock4 = sp.Matrix([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]) / sp.sqrt(2)
     S_adj = sp.Matrix([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]) / 2
     S_cz4 = sp.Matrix([[0, 0, 1, 1], [0, 0, 1, -1], [1, 1, 0, 0], [1, -1, 0, 0]]) / (2 * sp.sqrt(2))
-    assert S_adj.rank() == 4 and S_cz4.rank() == 4
+    assert S_fock4.rank() == 2 and S_adj.rank() == 4 and S_cz4.rank() == 4
+    assert (S_fock4.H * S_fock4).eigenvals() == {sp.Rational(1, 2): 2, sp.Integer(0): 2}
+    assert (S_adj.H * S_adj).eigenvals() == {sp.Rational(1, 4): 4}
+    assert (S_cz4.H * S_cz4).eigenvals() == {sp.Rational(1, 4): 4}
     SWAP_bc = sp.Matrix([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     BS_cd = sp.Matrix([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1 / sp.sqrt(2), 1 / sp.sqrt(2)], [0, 0, 1 / sp.sqrt(2), -1 / sp.sqrt(2)]])
-    assert sp.simplify((BS_cd * SWAP_bc) * S_adj * (BS_cd * SWAP_bc).T - S_cz4) == sp.zeros(4, 4)
+    U_sw = BS_cd * SWAP_bc
+    assert sp.simplify(U_sw.H * U_sw - sp.eye(4)) == sp.zeros(4, 4)
+    assert sp.simplify(U_sw * S_adj * U_sw.T - S_cz4) == sp.zeros(4, 4)
 
     # Dual-pumped TMSV 4-photon component has D^(4) = I_4 (invariant under any U_sw in U(4)).
     states4, b4 = annihilation_sympy(4, 4)
@@ -394,9 +420,15 @@ def verify_passive_synthesis_and_spdc():
     # Three-photon NOON passive synthesis no-go via single-particle D-spectrum invariance.
     states3, b3 = annihilation_sympy(3, 3)
     _, idx3 = fock_basis(3, 3)
-    psi_noon3 = sp.zeros(len(states3), 1); psi_noon3[idx3[(3, 0, 0)]] = psi_noon3[idx3[(0, 3, 0)]] = 1 / sp.sqrt(2)
-    D_n3 = sp.Matrix([[sp.simplify((psi_noon3.H * (b3[m].H * b3[n]) * psi_noon3)[0, 0]) for n in range(3)] for m in range(3)])
-    assert D_n3.eigenvals() == {sp.Rational(3, 2): 2, sp.Integer(0): 1}
+    for sgn in (+1, -1):
+        psi_noon3 = sp.zeros(len(states3), 1)
+        psi_noon3[idx3[(3, 0, 0)]] = 1 / sp.sqrt(2)
+        psi_noon3[idx3[(0, 3, 0)]] = sgn / sp.sqrt(2)
+        D_n3 = sp.Matrix([[sp.simplify((psi_noon3.H * (b3[m].H * b3[n]) * psi_noon3)[0, 0]) for n in range(3)] for m in range(3)])
+        spec_n3 = D_n3.eigenvals()
+        assert spec_n3 == {sp.Rational(3, 2): 2, sp.Integer(0): 1}
+        for prod_spec in ({sp.Integer(3): 1, sp.Integer(0): 2}, {sp.Integer(2): 1, sp.Integer(1): 1, sp.Integer(0): 1}, {sp.Integer(1): 3}):
+            assert spec_n3 != prod_spec
 
     return {
         "passive_synthesis_B1_B2_CZ4_verified": True,

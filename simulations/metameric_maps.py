@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from model import (  # noqa: E402
+from model import (
     DATA_DIR,
     annihilation_sym2,
     clements_layer,
@@ -391,6 +391,14 @@ def compute_network_topology_and_disorder(rng: np.random.Generator) -> dict:
 
 
 def main():
+    required = ("core_networks.json", "clements_fsw.json")
+    missing = [name for name in required if not os.path.isfile(os.path.join(DATA_DIR, name))]
+    if missing:
+        raise FileNotFoundError(
+            f"Missing {', '.join(missing)} in {DATA_DIR}; "
+            "run simulations/core_networks.py and simulations/clements_fsw.py first."
+        )
+
     t0 = time.perf_counter()
     seed = 20261124
     rng = np.random.default_rng(seed)
@@ -399,6 +407,7 @@ def main():
     net_data = compute_network_topology_and_disorder(rng)
     elapsed = time.perf_counter() - t0
 
+    os.makedirs(DATA_DIR, exist_ok=True)
     out_path = os.path.join(DATA_DIR, "metameric_maps.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({
